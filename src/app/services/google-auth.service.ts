@@ -5,16 +5,75 @@ import { environment } from '../../environments/environment';
 declare const google: any;
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const STORAGE_KEY = 'drive-audio.auth.v1';
+
+interface StoredSession {
+  token: string;
+  expiresAt: number;
+  consented: boolean;
+}
 
 @Injectable({ providedIn: 'root' })
 export class GoogleAuthService {
   private tokenClient: any = null;
   private expiresAt = 0;
+  private consented = false;
   private pendingResolve: ((token: string) => void) | null = null;
   private pendingReject: ((err: unknown) => void) | null = null;
 
   readonly accessToken = signal<string | null>(null);
   readonly isSignedIn = signal(false);
+
+  constructor() {
+    this.restoreFromStorage();
+  }
+
+  /** Load a persisted token so a page reload keeps the user signed in. */
+  private restoreFromStorage(): void {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw) as StoredSession;
+      this.consented = !!s.consented;
+      if (s.token && Date.now() < s.expiresAt - 60_000) {
+        this.accessToken.set(s.token);
+        this.expiresAt = s.expiresAt;
+        this.isSignedIn.set(true);
+      }
+    } catch {
+      /* corrupt/unavailable storage — ignore */
+    }
+  }
+
+  private persist(): void {
+    try {
+      const session: StoredSession = {
+        token: this.accessToken() ?? '',
+        expiresAt: this.expiresAt,
+        consented: this.consented,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    } catch {
+      /* storage full / unavailable — ignore for a personal app */
+    }
+  }
+
+  /**
+   * Restore the session on app startup: reuse a still-valid token, or if the
+   * user has consented before, silently refresh without showing a popup.
+   */
+  async restoreSession(): Promise<void> {
+    if (this.accessToken() && Date.now() < this.expiresAt - 60_000) return;
+    if (!this.consented) return;
+    if (!environment.googleClientId || environment.googleClientId.includes('PASTE')) {
+      return;
+    }
+    try {
+      await this.signIn(false);
+    } catch {
+      /* silent refresh failed (e.g. no active Google session) — stay signed out */
+    }
+  }
 
   /** Wait for the GIS script to load and create a token client once. */
   private initClient(): Promise<void> {
@@ -33,6 +92,8 @@ export class GoogleAuthService {
                 this.isSignedIn.set(true);
                 this.expiresAt =
                   Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+                this.consented = true;
+                this.persist();
                 this.pendingResolve?.(resp.access_token);
               } else {
                 this.pendingReject?.(new Error('Authorization was cancelled.'));
@@ -97,5 +158,11 @@ export class GoogleAuthService {
     this.accessToken.set(null);
     this.isSignedIn.set(false);
     this.expiresAt = 0;
+    this.consented = false;
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 }

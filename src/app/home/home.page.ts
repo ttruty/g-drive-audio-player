@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -118,6 +118,9 @@ export class HomePage {
     return this.tracks().filter((t) => !inList.has(t.id));
   });
 
+  private static readonly FOLDER_KEY = 'drive-audio.folder.v1';
+  private autoLoaded = false;
+
   folderInput = '';
   recursive = true;
 
@@ -149,6 +152,48 @@ export class HomePage {
       volumeHighOutline,
       playOutline,
     });
+
+    // Restore the last-used Drive folder so it's ready on return.
+    const saved = this.readFolderPref();
+    if (saved) {
+      this.folderInput = saved.folder;
+      this.recursive = saved.recursive;
+    }
+
+    // Once signed in, reload that folder automatically (once).
+    effect(() => {
+      const signedIn = this.auth.isSignedIn();
+      if (
+        signedIn &&
+        !this.autoLoaded &&
+        this.folderInput.trim() &&
+        !this.tracks().length
+      ) {
+        this.autoLoaded = true;
+        // Defer so signal writes happen outside the reactive effect.
+        setTimeout(() => void this.loadFolder(), 0);
+      }
+    });
+  }
+
+  private readFolderPref(): { folder: string; recursive: boolean } | null {
+    try {
+      const raw = localStorage.getItem(HomePage.FOLDER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private saveFolderPref(): void {
+    try {
+      localStorage.setItem(
+        HomePage.FOLDER_KEY,
+        JSON.stringify({ folder: this.folderInput, recursive: this.recursive })
+      );
+    } catch {
+      /* storage unavailable — ignore for a personal app */
+    }
   }
 
   // ── auth ──────────────────────────────────────────────────────────────────
@@ -171,6 +216,7 @@ export class HomePage {
       const found = await this.drive.listAudio(id, this.recursive);
       this.tracks.set(found);
       this.selected.set(new Set());
+      this.saveFolderPref();
       if (found.length === 0) {
         this.loadError.set('No audio files found in that folder.');
       }
