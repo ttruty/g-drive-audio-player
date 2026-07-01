@@ -1,0 +1,378 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>Drive Audio</ion-title>
+    <ion-buttons slot="end">
+      @if (auth.isSignedIn()) {
+        <ion-button (click)="auth.signOut()">
+          <ion-icon slot="icon-only" name="log-out-outline"></ion-icon>
+        </ion-button>
+      } @else {
+        <ion-button (click)="signIn()">
+          <ion-icon slot="start" name="logo-google"></ion-icon>
+          Sign in
+        </ion-button>
+      }
+    </ion-buttons>
+  </ion-toolbar>
+  <ion-toolbar>
+    <ion-segment
+      [value]="segment()"
+      (ionChange)="segment.set($any($event.detail.value))"
+    >
+      <ion-segment-button value="library">
+        <ion-label>Library</ion-label>
+      </ion-segment-button>
+      <ion-segment-button value="editor">
+        <ion-label>Edit</ion-label>
+      </ion-segment-button>
+      <ion-segment-button value="playlists">
+        <ion-label>Playlists</ion-label>
+      </ion-segment-button>
+    </ion-segment>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="ion-padding-bottom">
+  <!-- ─────────────────────────── LIBRARY ─────────────────────────── -->
+  @if (segment() === 'library') {
+    @if (!auth.isSignedIn()) {
+      <div class="empty-state">
+        <ion-icon name="logo-google" class="empty-icon"></ion-icon>
+        <p>Sign in with Google to browse a Drive folder.</p>
+        <ion-button (click)="signIn()">
+          <ion-icon slot="start" name="logo-google"></ion-icon>
+          Sign in with Google
+        </ion-button>
+      </div>
+    } @else {
+      <ion-list [inset]="true">
+        <ion-item>
+          <ion-icon slot="start" name="folder-open-outline"></ion-icon>
+          <ion-input
+            label="Drive folder"
+            labelPlacement="stacked"
+            placeholder="Folder ID or share link"
+            [(ngModel)]="folderInput"
+            (keyup.enter)="loadFolder()"
+          ></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-toggle [(ngModel)]="recursive">Include subfolders</ion-toggle>
+        </ion-item>
+        <ion-item button (click)="loadFolder()" [disabled]="loading()">
+          @if (loading()) {
+            <ion-spinner slot="start" name="crescent"></ion-spinner>
+            <ion-label>Loading…</ion-label>
+          } @else {
+            <ion-icon slot="start" name="refresh-outline"></ion-icon>
+            <ion-label>Load folder</ion-label>
+          }
+        </ion-item>
+      </ion-list>
+
+      @if (loadError()) {
+        <ion-text color="danger">
+          <p class="ion-padding-horizontal">{{ loadError() }}</p>
+        </ion-text>
+      }
+
+      @if (tracks().length) {
+        <ion-list [inset]="true">
+          <ion-list-header>
+            <ion-label>{{ tracks().length }} tracks</ion-label>
+            <ion-button fill="clear" size="small" (click)="playAll()">
+              <ion-icon slot="start" name="play"></ion-icon>
+              Play all
+            </ion-button>
+          </ion-list-header>
+
+          @for (track of tracks(); track track.id; let i = $index) {
+            <ion-item
+              [class.now-playing]="player.current()?.id === track.id"
+            >
+              <ion-checkbox
+                slot="start"
+                [checked]="isSelected(track.id)"
+                (ionChange)="toggleSelect(track.id)"
+              ></ion-checkbox>
+              <ion-label (click)="playTrack(i)" class="ion-text-wrap">
+                <div class="player-title">{{ track.name }}</div>
+                @if (track.path) {
+                  <div class="track-path">{{ track.path }}</div>
+                }
+              </ion-label>
+              <ion-button
+                slot="end"
+                fill="clear"
+                (click)="playTrack(i)"
+                aria-label="Play track"
+              >
+                <ion-icon slot="icon-only" name="play"></ion-icon>
+              </ion-button>
+            </ion-item>
+          }
+        </ion-list>
+
+        @if (selectedCount() > 0) {
+          <div class="selection-bar ion-padding-horizontal">
+            <ion-note>{{ selectedCount() }} selected</ion-note>
+            <ion-button size="small" fill="clear" (click)="clearSelection()">
+              Clear
+            </ion-button>
+          </div>
+        } @else {
+          <div class="ion-padding-horizontal">
+            <ion-button size="small" fill="clear" (click)="selectAll()">
+              Select all
+            </ion-button>
+          </div>
+        }
+      }
+    }
+  }
+
+  <!-- ─────────────────────────── EDITOR ─────────────────────────── -->
+  @if (segment() === 'editor') {
+    @if (!playlists.playlists().length) {
+      <div class="empty-state">
+        <ion-icon name="create-outline" class="empty-icon"></ion-icon>
+        <p>No playlists to edit yet. Create one from the Library first.</p>
+      </div>
+    } @else {
+      <ion-list [inset]="true">
+        <ion-item>
+          <ion-select
+            label="Editing"
+            labelPlacement="stacked"
+            interface="popover"
+            [value]="editingPlaylist()?.id"
+            (ionChange)="editingId.set($any($event.detail.value))"
+          >
+            @for (pl of playlists.playlists(); track pl.id) {
+              <ion-select-option [value]="pl.id">
+                {{ pl.name }} ({{ pl.tracks.length }})
+              </ion-select-option>
+            }
+          </ion-select>
+        </ion-item>
+      </ion-list>
+
+      @if (editingPlaylist(); as pl) {
+        <ion-list [inset]="true">
+          <ion-list-header>
+            <ion-label>In playlist · {{ pl.tracks.length }}</ion-label>
+          </ion-list-header>
+          @if (!pl.tracks.length) {
+            <ion-item lines="none">
+              <ion-label class="ion-text-wrap">
+                <ion-note>This playlist is empty. Add tracks below.</ion-note>
+              </ion-label>
+            </ion-item>
+          }
+          @for (track of pl.tracks; track track.id) {
+            <ion-item>
+              <ion-label class="ion-text-wrap">
+                <div class="player-title">{{ track.name }}</div>
+                @if (track.path) {
+                  <div class="track-path">{{ track.path }}</div>
+                }
+              </ion-label>
+              <ion-button
+                slot="end"
+                fill="clear"
+                color="danger"
+                (click)="removeFromPlaylist(pl, track.id)"
+                aria-label="Remove from playlist"
+              >
+                <ion-icon slot="icon-only" name="trash-outline"></ion-icon>
+              </ion-button>
+            </ion-item>
+          }
+        </ion-list>
+
+        <ion-list [inset]="true">
+          <ion-list-header>
+            <ion-label>Add from library</ion-label>
+          </ion-list-header>
+          @if (!tracks().length) {
+            <ion-item lines="none">
+              <ion-label class="ion-text-wrap">
+                <ion-note>Load a folder in the Library tab to add tracks.</ion-note>
+              </ion-label>
+            </ion-item>
+          } @else if (!tracksNotInPlaylist().length) {
+            <ion-item lines="none">
+              <ion-label class="ion-text-wrap">
+                <ion-note>Every loaded track is already in this playlist.</ion-note>
+              </ion-label>
+            </ion-item>
+          }
+          @for (track of tracksNotInPlaylist(); track track.id) {
+            <ion-item>
+              <ion-label class="ion-text-wrap">
+                <div class="player-title">{{ track.name }}</div>
+                @if (track.path) {
+                  <div class="track-path">{{ track.path }}</div>
+                }
+              </ion-label>
+              <ion-button
+                slot="end"
+                fill="clear"
+                (click)="addToPlaylist(pl, track)"
+                aria-label="Add to playlist"
+              >
+                <ion-icon slot="icon-only" name="add-outline"></ion-icon>
+              </ion-button>
+            </ion-item>
+          }
+        </ion-list>
+      }
+    }
+  }
+
+  <!-- ─────────────────────────── PLAYLISTS ─────────────────────────── -->
+  @if (segment() === 'playlists') {
+    @if (!playlists.playlists().length) {
+      <div class="empty-state">
+        <ion-icon name="musical-notes-outline" class="empty-icon"></ion-icon>
+        <p>No playlists yet. Select tracks in the Library and save them here.</p>
+      </div>
+    } @else {
+      @for (pl of playlists.playlists(); track pl.id) {
+        <ion-list [inset]="true">
+          <ion-item button [detail]="false" (click)="toggleExpand(pl)">
+            <ion-icon
+              slot="start"
+              [name]="expandedId() === pl.id ? 'chevron-down-outline' : 'chevron-forward-outline'"
+            ></ion-icon>
+            <ion-label>
+              <div class="player-title">{{ pl.name }}</div>
+              <ion-note>{{ pl.tracks.length }} tracks</ion-note>
+            </ion-label>
+            <ion-button
+              slot="end"
+              fill="clear"
+              [disabled]="!pl.tracks.length"
+              (click)="playPlaylist(pl); $event.stopPropagation()"
+              aria-label="Play playlist"
+            >
+              <ion-icon slot="icon-only" name="play"></ion-icon>
+            </ion-button>
+            <ion-button
+              slot="end"
+              fill="clear"
+              (click)="renamePlaylist(pl); $event.stopPropagation()"
+              aria-label="Rename playlist"
+            >
+              <ion-icon slot="icon-only" name="create-outline"></ion-icon>
+            </ion-button>
+            <ion-button
+              slot="end"
+              fill="clear"
+              color="danger"
+              (click)="deletePlaylist(pl); $event.stopPropagation()"
+              aria-label="Delete playlist"
+            >
+              <ion-icon slot="icon-only" name="trash-outline"></ion-icon>
+            </ion-button>
+          </ion-item>
+
+          @if (expandedId() === pl.id) {
+            @if (!pl.tracks.length) {
+              <ion-item lines="none">
+                <ion-label class="ion-text-wrap">
+                  <ion-note>This playlist is empty.</ion-note>
+                </ion-label>
+              </ion-item>
+            }
+            @for (track of pl.tracks; track track.id; let i = $index) {
+              <ion-item
+                button
+                [detail]="false"
+                [class.now-playing]="player.current()?.id === track.id"
+                (click)="playPlaylistTrack(pl, i)"
+              >
+                <ion-icon
+                  slot="start"
+                  [name]="player.current()?.id === track.id && player.isPlaying() ? 'volume-high-outline' : 'play-outline'"
+                ></ion-icon>
+                <ion-label class="ion-text-wrap">
+                  <div class="player-title">{{ track.name }}</div>
+                  @if (track.path) {
+                    <div class="track-path">{{ track.path }}</div>
+                  }
+                </ion-label>
+              </ion-item>
+            }
+          }
+        </ion-list>
+      }
+    }
+  }
+
+  <!-- ─────────────────── SAVE-AS-PLAYLIST FAB ─────────────────── -->
+  @if (segment() === 'library' && selectedCount() > 0) {
+    <ion-fab
+      slot="fixed"
+      vertical="bottom"
+      horizontal="end"
+      [class.fab-raised]="player.current()"
+    >
+      <ion-fab-button (click)="saveSelection()" aria-label="Save as playlist">
+        <ion-icon name="save-outline"></ion-icon>
+        <ion-badge class="fab-badge">{{ selectedCount() }}</ion-badge>
+      </ion-fab-button>
+    </ion-fab>
+  }
+</ion-content>
+
+<!-- ─────────────────────────── PLAYER BAR ─────────────────────────── -->
+@if (player.current()) {
+  <ion-footer>
+    <ion-toolbar>
+      <div class="player-bar">
+        <div class="player-meta">
+          @if (player.loading()) {
+            <ion-spinner name="crescent"></ion-spinner>
+          } @else {
+            <ion-icon name="musical-notes-outline" class="player-note"></ion-icon>
+          }
+          <div class="player-title">{{ player.current()?.name }}</div>
+        </div>
+
+        <div class="player-controls">
+          <ion-button fill="clear" (click)="player.prev()" aria-label="Previous">
+            <ion-icon slot="icon-only" name="play-skip-back-outline"></ion-icon>
+          </ion-button>
+          <ion-button fill="clear" (click)="player.togglePlay()" aria-label="Play or pause">
+            <ion-icon
+              slot="icon-only"
+              [name]="player.isPlaying() ? 'pause' : 'play'"
+            ></ion-icon>
+          </ion-button>
+          <ion-button fill="clear" (click)="player.next()" aria-label="Next">
+            <ion-icon slot="icon-only" name="play-skip-forward-outline"></ion-icon>
+          </ion-button>
+        </div>
+      </div>
+
+      <div class="player-seek">
+        <span class="mini-time">{{ formatTime(player.position()) }}</span>
+        <ion-range
+          aria-label="Seek"
+          [min]="0"
+          [max]="player.duration() || 0"
+          [value]="player.position()"
+          (ionChange)="onSeek($event)"
+        ></ion-range>
+        <span class="mini-time">{{ formatTime(player.duration()) }}</span>
+      </div>
+
+      @if (player.error()) {
+        <ion-text color="danger">
+          <p class="ion-padding-horizontal player-error">{{ player.error() }}</p>
+        </ion-text>
+      }
+    </ion-toolbar>
+  </ion-footer>
+}

@@ -1,0 +1,85 @@
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 48px 24px;
+  opacity: 0.85;
+}
+
+.empty-icon {
+  font-size: 56px;
+  opacity: 0.4;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+ion-fab {
+  // Lift the FAB above the player bar while a track is playing.
+  &.fab-raised {
+    margin-bottom: 132px;
+  }
+}
+
+.fab-badge {
+  position: absolute;
+  top: -4px;
+  inset-inline-end: -4px;
+}
+
+.player-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 0;
+}
+
+.player-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.player-note {
+  font-size: 20px;
+  color: var(--ion-color-primary);
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.player-controls ion-button {
+  --padding-start: 4px;
+  --padding-end: 4px;
+}
+
+.player-seek {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 4px;
+}
+
+.player-seek ion-range {
+  flex: 1;
+  --bar-height: 3px;
+  padding: 0;
+}
+
+.player-error {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+}
