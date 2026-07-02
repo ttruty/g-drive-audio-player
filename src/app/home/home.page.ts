@@ -34,11 +34,14 @@ import {
 import { addIcons } from 'ionicons';
 import {
   addOutline,
+  addCircleOutline,
+  albumsOutline,
   chevronDownOutline,
   chevronForwardOutline,
   cloudOfflineOutline,
   createOutline,
   folderOpenOutline,
+  settingsOutline,
   logInOutline,
   logoGoogle,
   logOutOutline,
@@ -61,8 +64,11 @@ import { GoogleAuthService } from '../services/google-auth.service';
 import { DriveService } from '../services/drive.service';
 import { PlayerService } from '../services/player.service';
 import { PlaylistService } from '../services/playlist.service';
+import { FoldersService, SavedFolder } from '../services/folders.service';
+import { SettingsService } from '../services/settings.service';
 import { ArtworkComponent } from '../artwork/artwork.component';
 import { ArtworkPickerComponent } from '../artwork/artwork-picker.component';
+import { SettingsComponent } from '../settings/settings.component';
 import { Playlist, Track } from '../models';
 
 @Component({
@@ -107,6 +113,8 @@ export class HomePage {
   private drive = inject(DriveService);
   readonly player = inject(PlayerService);
   readonly playlists = inject(PlaylistService);
+  readonly folders = inject(FoldersService);
+  readonly settings = inject(SettingsService);
   private alertCtrl = inject(AlertController);
   private modalCtrl = inject(ModalController);
 
@@ -128,11 +136,12 @@ export class HomePage {
     return this.tracks().filter((t) => !inList.has(t.id));
   });
 
-  private static readonly FOLDER_KEY = 'drive-audio.folder.v1';
   private autoLoaded = false;
 
   folderInput = '';
-  recursive = true;
+  folderName = '';
+  recursive = this.settings.defaultRecursive();
+  showAddFolder = signal(false);
 
   readonly loading = signal(false);
   readonly loadError = signal<string | null>(null);
@@ -169,49 +178,24 @@ export class HomePage {
       playBackOutline,
       playForwardOutline,
       listOutline,
+      settingsOutline,
+      addCircleOutline,
+      albumsOutline,
     });
 
-    // Restore the last-used Drive folder so it's ready on return.
-    const saved = this.readFolderPref();
-    if (saved) {
-      this.folderInput = saved.folder;
-      this.recursive = saved.recursive;
-    }
-
-    // Once signed in, reload that folder automatically (once).
+    // Once signed in, reload the last-used folder automatically (once).
     effect(() => {
       const signedIn = this.auth.isSignedIn();
-      if (
-        signedIn &&
-        !this.autoLoaded &&
-        this.folderInput.trim() &&
-        !this.tracks().length
-      ) {
-        this.autoLoaded = true;
-        // Defer so signal writes happen outside the reactive effect.
-        setTimeout(() => void this.loadFolder(), 0);
+      const lastId = this.folders.lastSelectedId();
+      if (signedIn && !this.autoLoaded && lastId && !this.tracks().length) {
+        const f = this.folders.folders().find((x) => x.id === lastId);
+        if (f) {
+          this.autoLoaded = true;
+          // Defer so signal writes happen outside the reactive effect.
+          setTimeout(() => void this.loadSavedFolder(f), 0);
+        }
       }
     });
-  }
-
-  private readFolderPref(): { folder: string; recursive: boolean } | null {
-    try {
-      const raw = localStorage.getItem(HomePage.FOLDER_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  private saveFolderPref(): void {
-    try {
-      localStorage.setItem(
-        HomePage.FOLDER_KEY,
-        JSON.stringify({ folder: this.folderInput, recursive: this.recursive })
-      );
-    } catch {
-      /* storage unavailable — ignore for a personal app */
-    }
   }
 
   // ── auth ──────────────────────────────────────────────────────────────────
@@ -223,23 +207,102 @@ export class HomePage {
     }
   }
 
-  // ── library ─────────────────────────────────────────────────────────────
-  async loadFolder(): Promise<void> {
+  async openSettings(): Promise<void> {
+    const modal = await this.modalCtrl.create({ component: SettingsComponent });
+    await modal.present();
+  }
+
+  // ── library / folders ─────────────────────────────────────────────────────
+  toggleAddFolder(): void {
+    this.recursive = this.settings.defaultRecursive();
+    this.showAddFolder.update((v) => !v);
+  }
+
+  async addFolder(): Promise<void> {
     const id = this.drive.parseFolderId(this.folderInput);
-    if (!id) return;
+    if (!id) {
+      this.loadError.set('Enter a Drive folder ID or share link.');
+      return;
+    }
+    const name = this.folderName.trim() || 'Drive folder';
+    const folder = this.folders.add(name, id, this.recursive);
+    this.folderInput = '';
+    this.folderName = '';
+    this.showAddFolder.set(false);
+    await this.loadSavedFolder(folder);
+  }
+
+  removeFolder(f: SavedFolder, ev: Event): void {
+    ev.stopPropagation();
+    this.folders.remove(f.id);
+  }
+
+  async renameFolder(f: SavedFolder, ev: Event): Promise<void> {
+    ev.stopPropagation();
+    const alert = await this.alertCtrl.create({
+      header: 'Rename folder',
+      inputs: [{ name: 'name', type: 'text', value: f.name }],
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Save',
+          handler: (data) => {
+            const name = (data?.name || '').trim();
+            if (name) this.folders.rename(f.id, name);
+            return true;
+          },
+        },
+      ],
+    });
+    await alert.present();
+  }
+
+  async loadSavedFolder(f: SavedFolder): Promise<void> {
+    this.folders.setLast(f.id);
     this.loading.set(true);
     this.loadError.set(null);
     try {
       if (!this.auth.isSignedIn()) await this.auth.signIn(true);
-      const found = await this.drive.listAudio(id, this.recursive);
+      const found = await this.drive.listAudio(f.folderId, f.recursive);
       this.tracks.set(found);
       this.selected.set(new Set());
-      this.saveFolderPref();
       if (found.length === 0) {
         this.loadError.set('No audio files found in that folder.');
       }
     } catch (e: any) {
       this.loadError.set(e?.message ?? 'Could not load that folder.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  /** Load and merge tracks from every saved folder into one library. */
+  async loadAllFolders(): Promise<void> {
+    const all = this.folders.folders();
+    if (!all.length) return;
+    this.folders.setLast(null);
+    this.loading.set(true);
+    this.loadError.set(null);
+    try {
+      if (!this.auth.isSignedIn()) await this.auth.signIn(true);
+      const seen = new Set<string>();
+      const merged: Track[] = [];
+      for (const f of all) {
+        const found = await this.drive.listAudio(f.folderId, f.recursive);
+        for (const t of found) {
+          if (!seen.has(t.id)) {
+            seen.add(t.id);
+            merged.push(t);
+          }
+        }
+      }
+      this.tracks.set(merged);
+      this.selected.set(new Set());
+      if (!merged.length) {
+        this.loadError.set('No audio files found across your folders.');
+      }
+    } catch (e: any) {
+      this.loadError.set(e?.message ?? 'Could not load your folders.');
     } finally {
       this.loading.set(false);
     }

@@ -1,6 +1,11 @@
 <ion-header [translucent]="true">
   <ion-toolbar>
     <ion-title>G Drive Audio</ion-title>
+    <ion-buttons slot="start">
+      <ion-button (click)="openSettings()" aria-label="Settings">
+        <ion-icon slot="icon-only" name="settings-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
     <ion-buttons slot="end">
       @if (auth.isSignedIn()) {
         <ion-button (click)="auth.signOut()">
@@ -49,29 +54,100 @@
       </div>
     } @else {
       <ion-list [inset]="true">
-        <ion-item>
-          <ion-icon slot="start" name="folder-open-outline"></ion-icon>
-          <ion-input
-            label="Drive folder"
-            labelPlacement="stacked"
-            placeholder="Folder ID or share link"
-            [(ngModel)]="folderInput"
-            (keyup.enter)="loadFolder()"
-          ></ion-input>
-        </ion-item>
-        <ion-item>
-          <ion-toggle [(ngModel)]="recursive">Include subfolders</ion-toggle>
-        </ion-item>
-        <ion-item button (click)="loadFolder()" [disabled]="loading()">
-          @if (loading()) {
-            <ion-spinner slot="start" name="crescent"></ion-spinner>
-            <ion-label>Loading…</ion-label>
-          } @else {
-            <ion-icon slot="start" name="refresh-outline"></ion-icon>
-            <ion-label>Load folder</ion-label>
+        <ion-list-header>
+          <ion-label>Your folders</ion-label>
+          @if (folders.folders().length > 1) {
+            <ion-button
+              fill="clear"
+              size="small"
+              [disabled]="loading()"
+              (click)="loadAllFolders()"
+            >
+              <ion-icon slot="start" name="albums-outline"></ion-icon>
+              Load all
+            </ion-button>
           }
+        </ion-list-header>
+
+        @if (!folders.folders().length) {
+          <ion-item lines="none">
+            <ion-label class="ion-text-wrap">
+              <ion-note>No folders yet. Add one below to get started.</ion-note>
+            </ion-label>
+          </ion-item>
+        }
+
+        @for (f of folders.folders(); track f.id) {
+          <ion-item
+            button
+            [detail]="false"
+            [class.now-playing]="folders.lastSelectedId() === f.id"
+            (click)="loadSavedFolder(f)"
+          >
+            <ion-icon slot="start" name="folder-open-outline"></ion-icon>
+            <ion-label class="ion-text-wrap">
+              <div class="player-title">{{ f.name }}</div>
+              <ion-note>{{ f.recursive ? 'Includes subfolders' : 'Top level only' }}</ion-note>
+            </ion-label>
+            <ion-button
+              slot="end"
+              fill="clear"
+              (click)="renameFolder(f, $event)"
+              aria-label="Rename folder"
+            >
+              <ion-icon slot="icon-only" name="create-outline"></ion-icon>
+            </ion-button>
+            <ion-button
+              slot="end"
+              fill="clear"
+              color="danger"
+              (click)="removeFolder(f, $event)"
+              aria-label="Remove folder"
+            >
+              <ion-icon slot="icon-only" name="trash-outline"></ion-icon>
+            </ion-button>
+          </ion-item>
+        }
+
+        <ion-item button [detail]="false" (click)="toggleAddFolder()">
+          <ion-icon slot="start" name="add-circle-outline" color="primary"></ion-icon>
+          <ion-label color="primary">Add a folder</ion-label>
         </ion-item>
       </ion-list>
+
+      @if (showAddFolder()) {
+        <ion-list [inset]="true">
+          <ion-item>
+            <ion-input
+              label="Name"
+              labelPlacement="stacked"
+              placeholder="e.g. Audiobooks"
+              [(ngModel)]="folderName"
+            ></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-input
+              label="Drive folder"
+              labelPlacement="stacked"
+              placeholder="Folder ID or share link"
+              [(ngModel)]="folderInput"
+              (keyup.enter)="addFolder()"
+            ></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-toggle [(ngModel)]="recursive">Include subfolders</ion-toggle>
+          </ion-item>
+          <ion-item button (click)="addFolder()" [disabled]="loading()">
+            @if (loading()) {
+              <ion-spinner slot="start" name="crescent"></ion-spinner>
+              <ion-label>Loading…</ion-label>
+            } @else {
+              <ion-icon slot="start" name="add-outline"></ion-icon>
+              <ion-label>Add &amp; load</ion-label>
+            }
+          </ion-item>
+        </ion-list>
+      }
 
       @if (loadError()) {
         <ion-text color="danger">
@@ -363,11 +439,11 @@
           <ion-button
             class="skip-btn"
             fill="clear"
-            (click)="player.skip(-15)"
-            aria-label="Back 15 seconds"
+            (click)="player.skip(-settings.skipSeconds())"
+            [attr.aria-label]="'Back ' + settings.skipSeconds() + ' seconds'"
           >
             <ion-icon slot="icon-only" name="play-back-outline"></ion-icon>
-            <span class="skip-num">15</span>
+            <span class="skip-num">{{ settings.skipSeconds() }}</span>
           </ion-button>
           <ion-button
             class="np-play"
@@ -386,11 +462,11 @@
           <ion-button
             class="skip-btn"
             fill="clear"
-            (click)="player.skip(15)"
-            aria-label="Forward 15 seconds"
+            (click)="player.skip(settings.skipSeconds())"
+            [attr.aria-label]="'Forward ' + settings.skipSeconds() + ' seconds'"
           >
             <ion-icon slot="icon-only" name="play-forward-outline"></ion-icon>
-            <span class="skip-num">15</span>
+            <span class="skip-num">{{ settings.skipSeconds() }}</span>
           </ion-button>
           <ion-button fill="clear" (click)="player.next()" aria-label="Next">
             <ion-icon slot="icon-only" name="play-skip-forward-outline"></ion-icon>

@@ -33,7 +33,7 @@
               "node_modules/@ionic/angular/css/text-alignment.css",
               "node_modules/@ionic/angular/css/text-transformation.css",
               "node_modules/@ionic/angular/css/flex-utils.css",
-              "node_modules/@ionic/angular/css/palettes/dark.system.css",
+              "node_modules/@ionic/angular/css/palettes/dark.class.css",
               "src/theme/variables.scss",
               "src/global.scss"
             ],
