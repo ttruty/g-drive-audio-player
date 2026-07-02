@@ -53,6 +53,40 @@
         </ion-button>
       </div>
     } @else {
+      @if (progress.recent().length) {
+        <ion-list [inset]="true">
+          <ion-list-header>
+            <ion-label>Continue listening</ion-label>
+          </ion-list-header>
+          @for (p of progress.recent().slice(0, 6); track p.track.id) {
+            <ion-item button [detail]="false" (click)="resumeProgress(p)">
+              <app-artwork slot="start" [seed]="p.track.id" [size]="44"></app-artwork>
+              <ion-label class="ion-text-wrap">
+                <div class="player-title">{{ p.track.name }}</div>
+                <div class="progress-line">
+                  <div
+                    class="progress-fill"
+                    [style.width.%]="progressPercent(p)"
+                  ></div>
+                </div>
+                <ion-note>
+                  {{ formatTime(p.position) }} / {{ formatTime(p.duration) }}
+                </ion-note>
+              </ion-label>
+              <ion-button
+                slot="end"
+                fill="clear"
+                color="medium"
+                (click)="progress.clear(p.track.id); $event.stopPropagation()"
+                aria-label="Remove from continue listening"
+              >
+                <ion-icon slot="icon-only" name="close-circle-outline"></ion-icon>
+              </ion-button>
+            </ion-item>
+          }
+        </ion-list>
+      }
+
       <ion-list [inset]="true">
         <ion-list-header>
           <ion-label>Your folders</ion-label>
@@ -156,16 +190,35 @@
       }
 
       @if (tracks().length) {
+        <div class="library-tools ion-padding-horizontal">
+          <ion-searchbar
+            class="lib-search"
+            placeholder="Search tracks"
+            [debounce]="150"
+            [value]="search()"
+            (ionInput)="search.set($any($event.detail.value) || '')"
+          ></ion-searchbar>
+          <ion-button
+            fill="clear"
+            size="small"
+            (click)="sort.set(sort() === 'name' ? 'default' : 'name')"
+            [color]="sort() === 'name' ? 'primary' : 'medium'"
+            aria-label="Sort by name"
+          >
+            <ion-icon slot="icon-only" name="swap-vertical-outline"></ion-icon>
+          </ion-button>
+        </div>
+
         <ion-list [inset]="true">
           <ion-list-header>
-            <ion-label>{{ tracks().length }} tracks</ion-label>
+            <ion-label>{{ filteredTracks().length }} tracks</ion-label>
             <ion-button fill="clear" size="small" (click)="playAll()">
               <ion-icon slot="start" name="play"></ion-icon>
               Play all
             </ion-button>
           </ion-list-header>
 
-          @for (track of tracks(); track track.id; let i = $index) {
+          @for (track of filteredTracks(); track track.id; let i = $index) {
             <ion-item
               [class.now-playing]="player.current()?.id === track.id"
             >
@@ -186,6 +239,22 @@
                   <div class="track-path">{{ track.path }}</div>
                 }
               </ion-label>
+              <ion-button
+                slot="end"
+                fill="clear"
+                [color]="offline.isCached(track.id) ? 'primary' : 'medium'"
+                (click)="toggleDownload(track, $event)"
+                [attr.aria-label]="offline.isCached(track.id) ? 'Remove download' : 'Download'"
+              >
+                @if (offline.isDownloading(track.id)) {
+                  <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
+                } @else {
+                  <ion-icon
+                    slot="icon-only"
+                    [name]="offline.isCached(track.id) ? 'cloud-done-outline' : 'cloud-download-outline'"
+                  ></ion-icon>
+                }
+              </ion-button>
               <ion-button
                 slot="end"
                 fill="clear"
@@ -353,6 +422,16 @@
             <ion-button
               slot="end"
               fill="clear"
+              color="medium"
+              [disabled]="!pl.tracks.length"
+              (click)="downloadPlaylist(pl, $event)"
+              aria-label="Download playlist"
+            >
+              <ion-icon slot="icon-only" name="cloud-download-outline"></ion-icon>
+            </ion-button>
+            <ion-button
+              slot="end"
+              fill="clear"
               (click)="renamePlaylist(pl); $event.stopPropagation()"
               aria-label="Rename playlist"
             >
@@ -377,25 +456,31 @@
                 </ion-label>
               </ion-item>
             }
-            @for (track of pl.tracks; track track.id; let i = $index) {
-              <ion-item
-                button
-                [detail]="false"
-                [class.now-playing]="player.current()?.id === track.id"
-                (click)="playPlaylistTrack(pl, i)"
-              >
-                <ion-icon
-                  slot="start"
-                  [name]="player.current()?.id === track.id && player.isPlaying() ? 'volume-high-outline' : 'play-outline'"
-                ></ion-icon>
-                <ion-label class="ion-text-wrap">
-                  <div class="player-title">{{ track.name }}</div>
-                  @if (track.path) {
-                    <div class="track-path">{{ track.path }}</div>
-                  }
-                </ion-label>
-              </ion-item>
-            }
+            <ion-reorder-group
+              [disabled]="false"
+              (ionItemReorder)="onPlaylistReorder(pl, $event)"
+            >
+              @for (track of pl.tracks; track track.id; let i = $index) {
+                <ion-item
+                  button
+                  [detail]="false"
+                  [class.now-playing]="player.current()?.id === track.id"
+                  (click)="playPlaylistTrack(pl, i)"
+                >
+                  <ion-icon
+                    slot="start"
+                    [name]="player.current()?.id === track.id && player.isPlaying() ? 'volume-high-outline' : 'play-outline'"
+                  ></ion-icon>
+                  <ion-label class="ion-text-wrap">
+                    <div class="player-title">{{ track.name }}</div>
+                    @if (track.path) {
+                      <div class="track-path">{{ track.path }}</div>
+                    }
+                  </ion-label>
+                  <ion-reorder slot="end"></ion-reorder>
+                </ion-item>
+              }
+            </ion-reorder-group>
           }
         </ion-list>
       }
@@ -473,6 +558,46 @@
           </ion-button>
         </div>
 
+        <div class="np-extra">
+          <ion-button
+            fill="clear"
+            size="small"
+            [color]="player.shuffle() ? 'primary' : 'medium'"
+            (click)="player.toggleShuffle()"
+            aria-label="Shuffle"
+          >
+            <ion-icon slot="icon-only" name="shuffle-outline"></ion-icon>
+          </ion-button>
+          <ion-button fill="clear" size="small" (click)="openSpeed()">
+            <span class="rate-label">{{ player.rate() }}×</span>
+          </ion-button>
+          <ion-button
+            fill="clear"
+            size="small"
+            [color]="player.sleepActive() ? 'primary' : 'medium'"
+            (click)="openSleepTimer()"
+            aria-label="Sleep timer"
+          >
+            <ion-icon slot="icon-only" name="moon-outline"></ion-icon>
+          </ion-button>
+          <ion-button fill="clear" size="small" (click)="addBookmark()" aria-label="Add bookmark">
+            <ion-icon slot="icon-only" name="bookmark-outline"></ion-icon>
+          </ion-button>
+          <ion-button
+            fill="clear"
+            size="small"
+            class="repeat-btn"
+            [color]="player.repeat() !== 'off' ? 'primary' : 'medium'"
+            (click)="player.cycleRepeat()"
+            aria-label="Repeat"
+          >
+            <ion-icon slot="icon-only" name="repeat-outline"></ion-icon>
+            @if (player.repeat() === 'one') {
+              <span class="repeat-one">1</span>
+            }
+          </ion-button>
+        </div>
+
         @if (player.error()) {
           <ion-text color="danger">
             <p class="player-error">{{ player.error() }}</p>
@@ -480,32 +605,61 @@
         }
       </div>
 
+      @if (bookmarks.forTrack(cur.id).length) {
+        <ion-list [inset]="true">
+          <ion-list-header>
+            <ion-label>Bookmarks</ion-label>
+          </ion-list-header>
+          @for (b of bookmarks.forTrack(cur.id); track b.id) {
+            <ion-item button [detail]="false" (click)="jumpToBookmark(b.position)">
+              <ion-icon slot="start" name="bookmark-outline" color="primary"></ion-icon>
+              <ion-label class="ion-text-wrap">
+                <div>{{ b.label }}</div>
+                <ion-note>{{ formatTime(b.position) }}</ion-note>
+              </ion-label>
+              <ion-button
+                slot="end"
+                fill="clear"
+                color="danger"
+                (click)="bookmarks.remove(b.id); $event.stopPropagation()"
+                aria-label="Delete bookmark"
+              >
+                <ion-icon slot="icon-only" name="trash-outline"></ion-icon>
+              </ion-button>
+            </ion-item>
+          }
+        </ion-list>
+      }
+
       <ion-list [inset]="true">
         <ion-list-header>
           <ion-label>Queue · {{ player.queue().length }}</ion-label>
         </ion-list-header>
-        @for (track of player.queue(); track track.id; let i = $index) {
-          <ion-item
-            button
-            [detail]="false"
-            [class.now-playing]="player.index() === i"
-            (click)="player.playIndex(i)"
-          >
-            <app-artwork slot="start" [seed]="track.id" [size]="40"></app-artwork>
-            <ion-label class="ion-text-wrap">
-              <div class="player-title">{{ track.name }}</div>
-              @if (track.path) {
-                <div class="track-path">{{ track.path }}</div>
+        <ion-reorder-group [disabled]="false" (ionItemReorder)="onQueueReorder($event)">
+          @for (track of player.queue(); track track.id; let i = $index) {
+            <ion-item
+              button
+              [detail]="false"
+              [class.now-playing]="player.index() === i"
+              (click)="player.playIndex(i)"
+            >
+              <app-artwork slot="start" [seed]="track.id" [size]="40"></app-artwork>
+              <ion-label class="ion-text-wrap">
+                <div class="player-title">{{ track.name }}</div>
+                @if (track.path) {
+                  <div class="track-path">{{ track.path }}</div>
+                }
+              </ion-label>
+              @if (player.index() === i) {
+                <ion-icon
+                  slot="end"
+                  [name]="player.isPlaying() ? 'volume-high-outline' : 'pause'"
+                ></ion-icon>
               }
-            </ion-label>
-            @if (player.index() === i) {
-              <ion-icon
-                slot="end"
-                [name]="player.isPlaying() ? 'volume-high-outline' : 'pause'"
-              ></ion-icon>
-            }
-          </ion-item>
-        }
+              <ion-reorder slot="end"></ion-reorder>
+            </ion-item>
+          }
+        </ion-reorder-group>
       </ion-list>
     } @else {
       <div class="empty-state">

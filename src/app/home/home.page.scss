@@ -184,3 +184,55 @@ ion-fab {
 .np-play ion-icon {
   font-size: 30px;
 }
+
+.np-extra {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.np-extra .rate-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.repeat-btn {
+  position: relative;
+}
+
+.repeat-one {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+/* ── library tools (search + sort) ──────────────────────────────────── */
+.library-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lib-search {
+  flex: 1;
+  --box-shadow: none;
+  padding: 4px 0;
+}
+
+/* ── continue-listening progress bar ────────────────────────────────── */
+.progress-line {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ion-color-step-150, rgba(255, 255, 255, 0.12));
+  margin: 5px 0 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--ion-color-primary);
+}

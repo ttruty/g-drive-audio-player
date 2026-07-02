@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { GoogleAuthService } from './google-auth.service';
+import { OfflineService } from './offline.service';
 import { Track } from '../models';
 
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
@@ -8,6 +9,7 @@ const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|flac|opus)$/i;
 @Injectable({ providedIn: 'root' })
 export class DriveService {
   private auth = inject(GoogleAuthService);
+  private offline = inject(OfflineService);
 
   /** Accept a raw folder id OR a Drive folder/share URL and extract the id. */
   parseFolderId(input: string): string {
@@ -102,6 +104,10 @@ export class DriveService {
    * point <audio src> straight at Drive) and hand back an object URL.
    */
   async getObjectUrl(fileId: string): Promise<string> {
+    // Prefer an offline copy so downloaded tracks play with no network.
+    const cached = await this.offline.getBlob(fileId);
+    if (cached) return URL.createObjectURL(cached);
+
     const token = await this.auth.getValidToken();
     const res = await fetch(`${DRIVE_FILES}/${fileId}?alt=media&supportsAllDrives=true`, {
       headers: { Authorization: `Bearer ${token}` },

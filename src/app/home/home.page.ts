@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
+  ActionSheetController,
   AlertController,
   ModalController,
   IonBadge,
@@ -21,6 +22,9 @@ import {
   IonListHeader,
   IonNote,
   IonRange,
+  IonReorder,
+  IonReorderGroup,
+  IonSearchbar,
   IonSegment,
   IonSegmentButton,
   IonSelect,
@@ -58,6 +62,16 @@ import {
   saveOutline,
   trashOutline,
   volumeHighOutline,
+  shuffleOutline,
+  repeatOutline,
+  moonOutline,
+  bookmarkOutline,
+  cloudDownloadOutline,
+  cloudDoneOutline,
+  speedometerOutline,
+  swapVerticalOutline,
+  timeOutline,
+  closeCircleOutline,
 } from 'ionicons/icons';
 
 import { GoogleAuthService } from '../services/google-auth.service';
@@ -66,6 +80,9 @@ import { PlayerService } from '../services/player.service';
 import { PlaylistService } from '../services/playlist.service';
 import { FoldersService, SavedFolder } from '../services/folders.service';
 import { SettingsService } from '../services/settings.service';
+import { ProgressService, TrackProgress } from '../services/progress.service';
+import { BookmarksService } from '../services/bookmarks.service';
+import { OfflineService } from '../services/offline.service';
 import { ArtworkComponent } from '../artwork/artwork.component';
 import { ArtworkPickerComponent } from '../artwork/artwork-picker.component';
 import { SettingsComponent } from '../settings/settings.component';
@@ -105,6 +122,9 @@ import { Playlist, Track } from '../models';
     IonBadge,
     IonSelect,
     IonSelectOption,
+    IonReorder,
+    IonReorderGroup,
+    IonSearchbar,
     ArtworkComponent,
   ],
 })
@@ -115,8 +135,14 @@ export class HomePage {
   readonly playlists = inject(PlaylistService);
   readonly folders = inject(FoldersService);
   readonly settings = inject(SettingsService);
+  readonly progress = inject(ProgressService);
+  readonly bookmarks = inject(BookmarksService);
+  readonly offline = inject(OfflineService);
   private alertCtrl = inject(AlertController);
+  private actionSheetCtrl = inject(ActionSheetController);
   private modalCtrl = inject(ModalController);
+
+  readonly rates = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
   readonly segment = signal<'library' | 'editor' | 'playlists' | 'player'>(
     'library'
@@ -148,6 +174,30 @@ export class HomePage {
   readonly tracks = signal<Track[]>([]);
   readonly selected = signal<Set<string>>(new Set());
   readonly selectedCount = computed(() => this.selected().size);
+
+  // Library search + sort.
+  readonly search = signal('');
+  readonly sort = signal<'default' | 'name' | 'path'>('default');
+  readonly filteredTracks = computed<Track[]>(() => {
+    const q = this.search().trim().toLowerCase();
+    let list = this.tracks();
+    if (q) {
+      list = list.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.path ?? '').toLowerCase().includes(q)
+      );
+    }
+    const sort = this.sort();
+    if (sort === 'name') {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sort === 'path') {
+      list = [...list].sort((a, b) =>
+        (a.path ?? '').localeCompare(b.path ?? '') || a.name.localeCompare(b.name)
+      );
+    }
+    return list;
+  });
 
   readonly progressPct = computed(() => {
     const d = this.player.duration();
@@ -181,6 +231,16 @@ export class HomePage {
       settingsOutline,
       addCircleOutline,
       albumsOutline,
+      shuffleOutline,
+      repeatOutline,
+      moonOutline,
+      bookmarkOutline,
+      cloudDownloadOutline,
+      cloudDoneOutline,
+      speedometerOutline,
+      swapVerticalOutline,
+      timeOutline,
+      closeCircleOutline,
     });
 
     // Once signed in, reload the last-used folder automatically (once).
@@ -309,11 +369,12 @@ export class HomePage {
   }
 
   playTrack(i: number): void {
-    void this.player.playQueue(this.tracks(), i);
+    void this.player.playQueue(this.filteredTracks(), i);
   }
 
   playAll(): void {
-    if (this.tracks().length) void this.player.playQueue(this.tracks(), 0);
+    const list = this.filteredTracks();
+    if (list.length) void this.player.playQueue(list, 0);
   }
 
   toggleSelect(id: string): void {
@@ -330,7 +391,7 @@ export class HomePage {
   }
 
   selectAll(): void {
-    this.selected.set(new Set(this.tracks().map((t) => t.id)));
+    this.selected.set(new Set(this.filteredTracks().map((t) => t.id)));
   }
 
   clearSelection(): void {
@@ -441,6 +502,121 @@ export class HomePage {
   onSeek(ev: CustomEvent): void {
     const value = (ev.detail as { value: number }).value;
     this.player.seek(value);
+  }
+
+  // ── speed / sleep action sheets ─────────────────────────────────────────────
+  async openSpeed(): Promise<void> {
+    const sheet = await this.actionSheetCtrl.create({
+      header: 'Playback speed',
+      buttons: [
+        ...this.rates.map((r) => ({
+          text: `${r}×`,
+          handler: () => this.player.setRate(r),
+        })),
+        { text: 'Cancel', role: 'cancel' },
+      ],
+    });
+    await sheet.present();
+  }
+
+  async openSleepTimer(): Promise<void> {
+    const sheet = await this.actionSheetCtrl.create({
+      header: 'Sleep timer',
+      buttons: [
+        ...[5, 15, 30, 45, 60].map((m) => ({
+          text: `${m} minutes`,
+          handler: () => this.player.setSleepTimer(m),
+        })),
+        {
+          text: 'End of track',
+          handler: () => this.player.setSleepEndOfTrack(),
+        },
+        { text: 'Off', role: 'destructive', handler: () => this.player.clearSleep() },
+        { text: 'Cancel', role: 'cancel' },
+      ],
+    });
+    await sheet.present();
+  }
+
+  // ── reorder ─────────────────────────────────────────────────────────────────
+  onQueueReorder(ev: CustomEvent): void {
+    const { from, to } = ev.detail as { from: number; to: number };
+    this.player.reorderQueue(from, to);
+    (ev.detail as any).complete(false);
+  }
+
+  onPlaylistReorder(pl: Playlist, ev: CustomEvent): void {
+    const { from, to } = ev.detail as { from: number; to: number };
+    this.playlists.reorder(pl.id, from, to);
+    (ev.detail as any).complete(false);
+  }
+
+  // ── offline downloads ───────────────────────────────────────────────────────
+  async toggleDownload(track: Track, ev?: Event): Promise<void> {
+    ev?.stopPropagation();
+    if (this.offline.isCached(track.id)) {
+      await this.offline.remove(track.id);
+    } else {
+      try {
+        await this.offline.download(track.id);
+      } catch (e: any) {
+        await this.toastError(e?.message ?? 'Download failed.');
+      }
+    }
+  }
+
+  async downloadPlaylist(pl: Playlist, ev: Event): Promise<void> {
+    ev.stopPropagation();
+    for (const t of pl.tracks) {
+      if (!this.offline.isCached(t.id)) {
+        try {
+          await this.offline.download(t.id);
+        } catch {
+          /* skip failures, continue */
+        }
+      }
+    }
+  }
+
+  // ── bookmarks ────────────────────────────────────────────────────────────────
+  async addBookmark(): Promise<void> {
+    const cur = this.player.current();
+    if (!cur) return;
+    const position = this.player.position();
+    const alert = await this.alertCtrl.create({
+      header: 'Add bookmark',
+      message: `At ${this.formatTime(position)}`,
+      inputs: [{ name: 'label', type: 'text', placeholder: 'Note (optional)' }],
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Save',
+          handler: (data) => {
+            this.bookmarks.add(
+              cur.id,
+              position,
+              (data?.label || '').trim() || this.formatTime(position)
+            );
+            return true;
+          },
+        },
+      ],
+    });
+    await alert.present();
+  }
+
+  jumpToBookmark(position: number): void {
+    this.player.seek(position);
+  }
+
+  // ── continue listening ────────────────────────────────────────────────────────
+  resumeProgress(p: TrackProgress): void {
+    void this.player.playQueue([p.track], 0);
+    this.segment.set('player');
+  }
+
+  progressPercent(p: TrackProgress): number {
+    return p.duration > 0 ? Math.min(100, (p.position / p.duration) * 100) : 0;
   }
 
   formatTime(seconds: number): string {

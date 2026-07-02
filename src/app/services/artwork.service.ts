@@ -64,6 +64,36 @@ export class ArtworkService {
     } 68% 40%))`;
   }
 
+  private dataUrlCache = new Map<string, string>();
+
+  /** Render the tile to a PNG data URL (for Media Session / lock-screen art). */
+  dataUrl(seed: string, size = 512): string {
+    const art = this.resolve(seed);
+    const cacheKey = `${seed}|${art.hue}|${art.emoji}|${size}`;
+    const hit = this.dataUrlCache.get(cacheKey);
+    if (hit) return hit;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      const grad = ctx.createLinearGradient(0, 0, size, size);
+      grad.addColorStop(0, `hsl(${art.hue}, 72%, 56%)`);
+      grad.addColorStop(1, `hsl(${(art.hue + 55) % 360}, 68%, 40%)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      ctx.font = `${Math.round(size * 0.5)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(art.emoji, size / 2, size * 0.54);
+      const url = canvas.toDataURL('image/png');
+      this.dataUrlCache.set(cacheKey, url);
+      return url;
+    } catch {
+      return '';
+    }
+  }
+
   set(seed: string, art: Artwork): void {
     this.overrides.update((o) => ({ ...o, [seed]: art }));
     this.write();

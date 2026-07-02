@@ -60,6 +60,19 @@ export class PlaylistService {
     this.write();
   }
 
+  reorder(id: string, from: number, to: number): void {
+    this.playlists.update((list) =>
+      list.map((p) => {
+        if (p.id !== id) return p;
+        const tracks = [...p.tracks];
+        const [moved] = tracks.splice(from, 1);
+        if (moved) tracks.splice(to, 0, moved);
+        return { ...p, tracks };
+      })
+    );
+    this.write();
+  }
+
   rename(id: string, name: string): void {
     this.playlists.update((list) =>
       list.map((p) => (p.id === id ? { ...p, name } : p))

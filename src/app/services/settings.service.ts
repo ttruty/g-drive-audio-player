@@ -26,11 +26,16 @@ export const SKIP_OPTIONS = [10, 15, 30, 45, 60];
 
 const STORAGE_KEY = 'drive-audio.settings.v1';
 
+export const BOOST_OPTIONS = [1, 1.25, 1.5, 2];
+
 interface StoredSettings {
   mode: ThemeMode;
   accent: string;
   skipSeconds: number;
   defaultRecursive: boolean;
+  resumeTracks: boolean;
+  boost: number;
+  skipSilence: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -39,6 +44,9 @@ export class SettingsService {
   readonly accent = signal<string>('ocean');
   readonly skipSeconds = signal<number>(15);
   readonly defaultRecursive = signal<boolean>(true);
+  readonly resumeTracks = signal<boolean>(true);
+  readonly boost = signal<number>(1);
+  readonly skipSilence = signal<boolean>(false);
 
   readonly accentPalette = computed(
     () => ACCENTS.find((a) => a.key === this.accent()) ?? ACCENTS[0]
@@ -74,6 +82,11 @@ export class SettingsService {
       if (typeof s.skipSeconds === 'number') this.skipSeconds.set(s.skipSeconds);
       if (typeof s.defaultRecursive === 'boolean')
         this.defaultRecursive.set(s.defaultRecursive);
+      if (typeof s.resumeTracks === 'boolean')
+        this.resumeTracks.set(s.resumeTracks);
+      if (typeof s.boost === 'number') this.boost.set(s.boost);
+      if (typeof s.skipSilence === 'boolean')
+        this.skipSilence.set(s.skipSilence);
     } catch {
       /* ignore */
     }
@@ -86,6 +99,9 @@ export class SettingsService {
         accent: this.accent(),
         skipSeconds: this.skipSeconds(),
         defaultRecursive: this.defaultRecursive(),
+        resumeTracks: this.resumeTracks(),
+        boost: this.boost(),
+        skipSilence: this.skipSilence(),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {

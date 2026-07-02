@@ -20,13 +20,20 @@ import {
   ModalController,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { checkmarkOutline, closeOutline } from 'ionicons/icons';
+import {
+  checkmarkOutline,
+  closeOutline,
+  downloadOutline,
+  cloudUploadOutline,
+} from 'ionicons/icons';
 
 import {
   ACCENTS,
+  BOOST_OPTIONS,
   SKIP_OPTIONS,
   SettingsService,
 } from '../services/settings.service';
+import { BackupService } from '../services/backup.service';
 
 @Component({
   selector: 'app-settings',
@@ -118,6 +125,42 @@ import {
         </ion-item>
         <ion-item>
           <ion-toggle
+            [checked]="settings.resumeTracks()"
+            (ionChange)="settings.resumeTracks.set($any($event.detail.checked))"
+          >
+            <ion-label>
+              Resume where you left off
+              <ion-note>Remember each track's position</ion-note>
+            </ion-label>
+          </ion-toggle>
+        </ion-item>
+        <ion-item>
+          <ion-select
+            label="Volume boost"
+            interface="popover"
+            [value]="settings.boost()"
+            (ionChange)="settings.boost.set($any($event.detail.value))"
+          >
+            @for (b of boostOptions; track b) {
+              <ion-select-option [value]="b">
+                {{ b === 1 ? 'Off' : b + '×' }}
+              </ion-select-option>
+            }
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-toggle
+            [checked]="settings.skipSilence()"
+            (ionChange)="settings.skipSilence.set($any($event.detail.checked))"
+          >
+            <ion-label>
+              Skip silence
+              <ion-note>Fast-forward through quiet gaps</ion-note>
+            </ion-label>
+          </ion-toggle>
+        </ion-item>
+        <ion-item>
+          <ion-toggle
             [checked]="settings.defaultRecursive()"
             (ionChange)="settings.defaultRecursive.set($any($event.detail.checked))"
           >
@@ -128,6 +171,29 @@ import {
           </ion-toggle>
         </ion-item>
       </ion-list>
+
+      <ion-list [inset]="true">
+        <ion-list-header><ion-label>Data</ion-label></ion-list-header>
+        <ion-item button [detail]="false" (click)="backup.export()">
+          <ion-icon slot="start" name="download-outline"></ion-icon>
+          <ion-label>Export backup</ion-label>
+        </ion-item>
+        <ion-item button [detail]="false" (click)="fileInput.click()">
+          <ion-icon slot="start" name="cloud-upload-outline"></ion-icon>
+          <ion-label>
+            Import backup
+            <ion-note>Playlists, folders, settings, progress</ion-note>
+          </ion-label>
+        </ion-item>
+      </ion-list>
+
+      <input
+        #fileInput
+        type="file"
+        accept="application/json"
+        hidden
+        (change)="onImportFile($event)"
+      />
     </ion-content>
   `,
   styles: [
@@ -162,12 +228,30 @@ import {
 export class SettingsComponent {
   private modalCtrl = inject(ModalController);
   readonly settings = inject(SettingsService);
+  readonly backup = inject(BackupService);
 
   readonly accents = ACCENTS;
   readonly skipOptions = SKIP_OPTIONS;
+  readonly boostOptions = BOOST_OPTIONS;
 
   constructor() {
-    addIcons({ closeOutline, checkmarkOutline });
+    addIcons({
+      closeOutline,
+      checkmarkOutline,
+      downloadOutline,
+      cloudUploadOutline,
+    });
+  }
+
+  async onImportFile(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      await this.backup.import(file);
+    } catch {
+      input.value = '';
+    }
   }
 
   dismiss(): void {
