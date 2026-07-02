@@ -21,10 +21,20 @@
   margin-top: 8px;
 }
 
+.row-art {
+  margin-right: 12px;
+  cursor: pointer;
+}
+
+.expand-chevron {
+  font-size: 16px;
+  opacity: 0.5;
+}
+
 ion-fab {
-  // Lift the FAB above the player bar while a track is playing.
+  // Lift the FAB above the mini player bar while a track is playing.
   &.fab-raised {
-    margin-bottom: 132px;
+    margin-bottom: 76px;
   }
 }
 
@@ -34,25 +44,57 @@ ion-fab {
   inset-inline-end: -4px;
 }
 
+/* ── 15-second skip buttons ─────────────────────────────────────────── */
+.skip-btn {
+  position: relative;
+}
+
+.skip-num {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* ── mini player bar (footer) ───────────────────────────────────────── */
+.mini-progress {
+  height: 2px;
+  background: var(--ion-color-step-150, rgba(255, 255, 255, 0.12));
+}
+
+.mini-progress-fill {
+  height: 100%;
+  background: var(--ion-color-primary);
+  transition: width 0.25s linear;
+}
+
 .player-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 8px 0;
+  padding: 6px 8px;
 }
 
 .player-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   flex: 1;
+  cursor: pointer;
 }
 
-.player-note {
-  font-size: 20px;
-  color: var(--ion-color-primary);
+.player-meta-text {
+  min-width: 0;
+}
+
+.player-sub {
+  font-size: 0.72rem;
+  opacity: 0.6;
 }
 
 .player-controls {
@@ -66,20 +108,79 @@ ion-fab {
   --padding-end: 4px;
 }
 
-.player-seek {
+.player-error {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* ── now-playing view (Player tab) ──────────────────────────────────── */
+.now-playing-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 20px 8px;
+}
+
+.np-art {
+  cursor: pointer;
+}
+
+.np-meta {
+  text-align: center;
+  margin: 20px 0 4px;
+  max-width: 100%;
+}
+
+.np-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.np-subtitle {
+  font-size: 0.85rem;
+  opacity: 0.6;
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.np-seek {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px 4px;
+  width: 100%;
+  max-width: 460px;
+  margin-top: 12px;
 }
 
-.player-seek ion-range {
+.np-seek ion-range {
   flex: 1;
-  --bar-height: 3px;
+  --bar-height: 4px;
   padding: 0;
 }
 
-.player-error {
-  margin: 0 0 6px;
-  font-size: 0.8rem;
+.np-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.np-controls ion-icon {
+  font-size: 26px;
+}
+
+.np-play {
+  --border-radius: 50%;
+  --padding-start: 0;
+  --padding-end: 0;
+  width: 64px;
+  height: 64px;
+  margin: 0 6px;
+}
+
+.np-play ion-icon {
+  font-size: 30px;
 }

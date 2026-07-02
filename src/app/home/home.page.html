@@ -28,6 +28,9 @@
       <ion-segment-button value="playlists">
         <ion-label>Playlists</ion-label>
       </ion-segment-button>
+      <ion-segment-button value="player" [disabled]="!player.current()">
+        <ion-label>Player</ion-label>
+      </ion-segment-button>
     </ion-segment>
   </ion-toolbar>
 </ion-header>
@@ -95,6 +98,12 @@
                 [checked]="isSelected(track.id)"
                 (ionChange)="toggleSelect(track.id)"
               ></ion-checkbox>
+              <app-artwork
+                class="row-art"
+                [seed]="track.id"
+                [size]="44"
+                (click)="editArtwork(track.id, track.name)"
+              ></app-artwork>
               <ion-label (click)="playTrack(i)" class="ion-text-wrap">
                 <div class="player-title">{{ track.name }}</div>
                 @if (track.path) {
@@ -241,14 +250,21 @@
       @for (pl of playlists.playlists(); track pl.id) {
         <ion-list [inset]="true">
           <ion-item button [detail]="false" (click)="toggleExpand(pl)">
-            <ion-icon
+            <app-artwork
               slot="start"
-              [name]="expandedId() === pl.id ? 'chevron-down-outline' : 'chevron-forward-outline'"
-            ></ion-icon>
+              [seed]="pl.id"
+              [size]="52"
+              (click)="editArtwork(pl.id, pl.name); $event.stopPropagation()"
+            ></app-artwork>
             <ion-label>
               <div class="player-title">{{ pl.name }}</div>
               <ion-note>{{ pl.tracks.length }} tracks</ion-note>
             </ion-label>
+            <ion-icon
+              slot="end"
+              class="expand-chevron"
+              [name]="expandedId() === pl.id ? 'chevron-down-outline' : 'chevron-forward-outline'"
+            ></ion-icon>
             <ion-button
               slot="end"
               fill="clear"
@@ -310,6 +326,119 @@
     }
   }
 
+  <!-- ─────────────────────────── PLAYER ─────────────────────────── -->
+  @if (segment() === 'player') {
+    @if (player.current(); as cur) {
+      <div class="now-playing-view">
+        <app-artwork
+          class="np-art"
+          [seed]="cur.id"
+          [size]="240"
+          (click)="editArtwork(cur.id, cur.name)"
+        ></app-artwork>
+
+        <div class="np-meta">
+          <div class="np-title">{{ cur.name }}</div>
+          @if (cur.path) {
+            <div class="np-subtitle">{{ cur.path }}</div>
+          }
+        </div>
+
+        <div class="np-seek">
+          <span class="mini-time">{{ formatTime(player.position()) }}</span>
+          <ion-range
+            aria-label="Seek"
+            [min]="0"
+            [max]="player.duration() || 0"
+            [value]="player.position()"
+            (ionChange)="onSeek($event)"
+          ></ion-range>
+          <span class="mini-time">{{ formatTime(player.duration()) }}</span>
+        </div>
+
+        <div class="np-controls">
+          <ion-button fill="clear" (click)="player.prev()" aria-label="Previous">
+            <ion-icon slot="icon-only" name="play-skip-back-outline"></ion-icon>
+          </ion-button>
+          <ion-button
+            class="skip-btn"
+            fill="clear"
+            (click)="player.skip(-15)"
+            aria-label="Back 15 seconds"
+          >
+            <ion-icon slot="icon-only" name="play-back-outline"></ion-icon>
+            <span class="skip-num">15</span>
+          </ion-button>
+          <ion-button
+            class="np-play"
+            (click)="player.togglePlay()"
+            aria-label="Play or pause"
+          >
+            @if (player.loading()) {
+              <ion-spinner name="crescent"></ion-spinner>
+            } @else {
+              <ion-icon
+                slot="icon-only"
+                [name]="player.isPlaying() ? 'pause' : 'play'"
+              ></ion-icon>
+            }
+          </ion-button>
+          <ion-button
+            class="skip-btn"
+            fill="clear"
+            (click)="player.skip(15)"
+            aria-label="Forward 15 seconds"
+          >
+            <ion-icon slot="icon-only" name="play-forward-outline"></ion-icon>
+            <span class="skip-num">15</span>
+          </ion-button>
+          <ion-button fill="clear" (click)="player.next()" aria-label="Next">
+            <ion-icon slot="icon-only" name="play-skip-forward-outline"></ion-icon>
+          </ion-button>
+        </div>
+
+        @if (player.error()) {
+          <ion-text color="danger">
+            <p class="player-error">{{ player.error() }}</p>
+          </ion-text>
+        }
+      </div>
+
+      <ion-list [inset]="true">
+        <ion-list-header>
+          <ion-label>Queue · {{ player.queue().length }}</ion-label>
+        </ion-list-header>
+        @for (track of player.queue(); track track.id; let i = $index) {
+          <ion-item
+            button
+            [detail]="false"
+            [class.now-playing]="player.index() === i"
+            (click)="player.playIndex(i)"
+          >
+            <app-artwork slot="start" [seed]="track.id" [size]="40"></app-artwork>
+            <ion-label class="ion-text-wrap">
+              <div class="player-title">{{ track.name }}</div>
+              @if (track.path) {
+                <div class="track-path">{{ track.path }}</div>
+              }
+            </ion-label>
+            @if (player.index() === i) {
+              <ion-icon
+                slot="end"
+                [name]="player.isPlaying() ? 'volume-high-outline' : 'pause'"
+              ></ion-icon>
+            }
+          </ion-item>
+        }
+      </ion-list>
+    } @else {
+      <div class="empty-state">
+        <ion-icon name="musical-notes-outline" class="empty-icon"></ion-icon>
+        <p>Nothing playing yet. Pick a track from your Library or a Playlist.</p>
+      </div>
+    }
+  }
+
   <!-- ─────────────────── SAVE-AS-PLAYLIST FAB ─────────────────── -->
   @if (segment() === 'library' && selectedCount() > 0) {
     <ion-fab
@@ -326,53 +455,61 @@
   }
 </ion-content>
 
-<!-- ─────────────────────────── PLAYER BAR ─────────────────────────── -->
-@if (player.current()) {
-  <ion-footer>
-    <ion-toolbar>
-      <div class="player-bar">
-        <div class="player-meta">
-          @if (player.loading()) {
-            <ion-spinner name="crescent"></ion-spinner>
-          } @else {
-            <ion-icon name="musical-notes-outline" class="player-note"></ion-icon>
-          }
-          <div class="player-title">{{ player.current()?.name }}</div>
+<!-- ─────────────────────────── MINI PLAYER BAR ─────────────────────────── -->
+@if (player.current(); as cur) {
+  @if (segment() !== 'player') {
+    <ion-footer>
+      <ion-toolbar>
+        <div class="mini-progress">
+          <div class="mini-progress-fill" [style.width.%]="progressPct()"></div>
         </div>
+        <div class="player-bar">
+          <div class="player-meta" (click)="openPlayer()">
+            <app-artwork [seed]="cur.id" [size]="40"></app-artwork>
+            <div class="player-meta-text">
+              <div class="player-title">{{ cur.name }}</div>
+              <div class="player-sub">
+                {{ player.isPlaying() ? 'Playing' : 'Paused' }}
+              </div>
+            </div>
+          </div>
 
-        <div class="player-controls">
-          <ion-button fill="clear" (click)="player.prev()" aria-label="Previous">
-            <ion-icon slot="icon-only" name="play-skip-back-outline"></ion-icon>
-          </ion-button>
-          <ion-button fill="clear" (click)="player.togglePlay()" aria-label="Play or pause">
-            <ion-icon
-              slot="icon-only"
-              [name]="player.isPlaying() ? 'pause' : 'play'"
-            ></ion-icon>
-          </ion-button>
-          <ion-button fill="clear" (click)="player.next()" aria-label="Next">
-            <ion-icon slot="icon-only" name="play-skip-forward-outline"></ion-icon>
-          </ion-button>
+          <div class="player-controls">
+            <ion-button
+              class="skip-btn"
+              fill="clear"
+              (click)="player.skip(-15)"
+              aria-label="Back 15 seconds"
+            >
+              <ion-icon slot="icon-only" name="play-back-outline"></ion-icon>
+              <span class="skip-num">15</span>
+            </ion-button>
+            <ion-button
+              fill="clear"
+              (click)="player.togglePlay()"
+              aria-label="Play or pause"
+            >
+              @if (player.loading()) {
+                <ion-spinner name="crescent"></ion-spinner>
+              } @else {
+                <ion-icon
+                  slot="icon-only"
+                  [name]="player.isPlaying() ? 'pause' : 'play'"
+                ></ion-icon>
+              }
+            </ion-button>
+            <ion-button
+              class="skip-btn"
+              fill="clear"
+              (click)="player.skip(15)"
+              aria-label="Forward 15 seconds"
+            >
+              <ion-icon slot="icon-only" name="play-forward-outline"></ion-icon>
+              <span class="skip-num">15</span>
+            </ion-button>
+          </div>
         </div>
-      </div>
-
-      <div class="player-seek">
-        <span class="mini-time">{{ formatTime(player.position()) }}</span>
-        <ion-range
-          aria-label="Seek"
-          [min]="0"
-          [max]="player.duration() || 0"
-          [value]="player.position()"
-          (ionChange)="onSeek($event)"
-        ></ion-range>
-        <span class="mini-time">{{ formatTime(player.duration()) }}</span>
-      </div>
-
-      @if (player.error()) {
-        <ion-text color="danger">
-          <p class="ion-padding-horizontal player-error">{{ player.error() }}</p>
-        </ion-text>
-      }
-    </ion-toolbar>
-  </ion-footer>
+      </ion-toolbar>
+    </ion-footer>
+  }
 }

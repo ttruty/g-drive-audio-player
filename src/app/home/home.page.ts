@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
   AlertController,
+  ModalController,
   IonBadge,
   IonButton,
   IonButtons,
@@ -44,9 +45,12 @@ import {
   musicalNotesOutline,
   pause,
   play,
+  playBackOutline,
+  playForwardOutline,
   playOutline,
   playSkipBackOutline,
   playSkipForwardOutline,
+  listOutline,
   refreshOutline,
   saveOutline,
   trashOutline,
@@ -57,6 +61,8 @@ import { GoogleAuthService } from '../services/google-auth.service';
 import { DriveService } from '../services/drive.service';
 import { PlayerService } from '../services/player.service';
 import { PlaylistService } from '../services/playlist.service';
+import { ArtworkComponent } from '../artwork/artwork.component';
+import { ArtworkPickerComponent } from '../artwork/artwork-picker.component';
 import { Playlist, Track } from '../models';
 
 @Component({
@@ -93,6 +99,7 @@ import { Playlist, Track } from '../models';
     IonBadge,
     IonSelect,
     IonSelectOption,
+    ArtworkComponent,
   ],
 })
 export class HomePage {
@@ -101,8 +108,11 @@ export class HomePage {
   readonly player = inject(PlayerService);
   readonly playlists = inject(PlaylistService);
   private alertCtrl = inject(AlertController);
+  private modalCtrl = inject(ModalController);
 
-  readonly segment = signal<'library' | 'editor' | 'playlists'>('library');
+  readonly segment = signal<'library' | 'editor' | 'playlists' | 'player'>(
+    'library'
+  );
 
   // ── editor ────────────────────────────────────────────────────────────────
   readonly editingId = signal<string | null>(null);
@@ -130,6 +140,11 @@ export class HomePage {
   readonly selected = signal<Set<string>>(new Set());
   readonly selectedCount = computed(() => this.selected().size);
 
+  readonly progressPct = computed(() => {
+    const d = this.player.duration();
+    return d > 0 ? Math.min(100, (this.player.position() / d) * 100) : 0;
+  });
+
   constructor() {
     addIcons({
       logoGoogle,
@@ -151,6 +166,9 @@ export class HomePage {
       chevronForwardOutline,
       volumeHighOutline,
       playOutline,
+      playBackOutline,
+      playForwardOutline,
+      listOutline,
     });
 
     // Restore the last-used Drive folder so it's ready on return.
@@ -339,6 +357,21 @@ export class HomePage {
       ],
     });
     await alert.present();
+  }
+
+  // ── player / artwork ──────────────────────────────────────────────────────
+  openPlayer(): void {
+    if (this.player.current()) this.segment.set('player');
+  }
+
+  async editArtwork(seed: string, name: string): Promise<void> {
+    const modal = await this.modalCtrl.create({
+      component: ArtworkPickerComponent,
+      componentProps: { seed, name },
+      breakpoints: [0, 0.9],
+      initialBreakpoint: 0.9,
+    });
+    await modal.present();
   }
 
   // ── player bar ────────────────────────────────────────────────────────────
