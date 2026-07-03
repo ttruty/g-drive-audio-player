@@ -25,7 +25,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Enables Pages (if not already) and sets the source to GitHub Actions.
+           # Enables Pages (if not already) and sets the source to GitHub Actions.
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
