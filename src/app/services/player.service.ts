@@ -8,6 +8,11 @@ import { Track } from '../models';
 const STORAGE_KEY = 'drive-audio.playback.v1';
 const SAVE_INTERVAL_MS = 15_000; // persist position at most this often
 
+// Skip-silence tuning: only fast-forward once a quiet stretch has lasted
+// longer than SILENCE_SKIP_AFTER seconds, so natural pauses are preserved.
+const SILENCE_RMS = 0.01;
+const SILENCE_SKIP_AFTER = 6; // seconds
+
 export type RepeatMode = 'off' | 'all' | 'one';
 
 interface StoredPlayback {
@@ -45,6 +50,7 @@ export class PlayerService {
   private gainNode: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
   private silenceRAF: number | null = null;
+  private silenceStart = -1; // track time (s) when the current silence began
 
   private sleepHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -202,6 +208,7 @@ export class PlayerService {
 
   private async load(track: Track): Promise<void> {
     const token = ++this.loadToken;
+    this.silenceStart = -1;
 
     let seekTo = 0;
     if (this.pendingSeek != null && this.index() === this.pendingSeekIndex) {
@@ -454,8 +461,23 @@ export class PlayerService {
         sum += c * c;
       }
       const rms = Math.sqrt(sum / buf.length);
-      if (rms < 0.01 && this.audio.currentTime < this.audio.duration - 1) {
-        this.audio.currentTime += 0.2;
+      const t = this.audio.currentTime;
+
+      if (rms >= SILENCE_RMS) {
+        // Sound is playing — reset the silence timer.
+        this.silenceStart = -1;
+      } else {
+        // Mark when the quiet stretch began (or after a manual seek back).
+        if (this.silenceStart < 0 || t < this.silenceStart) {
+          this.silenceStart = t;
+        }
+        // Only skip once the gap has exceeded the threshold.
+        if (
+          t - this.silenceStart > SILENCE_SKIP_AFTER &&
+          t < this.audio.duration - 1
+        ) {
+          this.audio.currentTime += 0.25;
+        }
       }
       this.silenceRAF = requestAnimationFrame(tick);
     };
